@@ -100,19 +100,34 @@ def make_sniffer_socket(args):
             if not ctypes.windll.shell32.IsUserAnAdmin():
                 raise SecurityError("Need admin rights on Windows.")
 
-            # Grab available interfaces
-            from psutil import net_if_addrs
-            ifaces = [(n, a.address)
-                      for n, addrs in net_if_addrs().items()
-                      for a in addrs if a.family == socket.AF_INET]
+            # Get available interfaces
+            ifaces = get_interfaces()
             if not ifaces:
                 raise SecurityError("No active interfaces found!")
 
-            chosen_ip = ifaces[0][1]  # lazy default
-            logger.info(f"Using interface: {chosen_ip}")
+            # Find the IP for the selected interface
+            selected_ip = None
+            for iface, ip in ifaces:
+                if iface == args.interface:
+                    selected_ip = ip
+                    break
+            
+            if not selected_ip:
+                try:
+                    # Try by number
+                    idx = int(args.interface) - 1
+                    if 0 <= idx < len(ifaces):
+                        selected_ip = ifaces[idx][1]
+                except (ValueError, IndexError):
+                    pass
+
+            if not selected_ip:
+                raise SecurityError(f"Could not find interface: {args.interface}")
+
+            logger.info(f"Using interface: {selected_ip}")
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-            sock.bind((chosen_ip, 0))
+            sock.bind((selected_ip, 0))
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
             sock.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
             logger.debug("Windows sniffer ready")
@@ -224,12 +239,38 @@ class PCAPWriter:
         self.file.write(struct.pack('@ I H H i I I I',
             0xa1b2c3d4, 2, 4, 0, 0, PACKET_SIZE, 1))
 
-    def write_packet(self, pkt):
+    def write_packet(self, pkt, is_windows=False):
+        """Write a packet to the PCAP file."""
         now = datetime.now()
-        ts_sec, ts_usec = int(now.timestamp()), now.microsecond
+        ts_sec = int(now.timestamp())
+        ts_usec = now.microsecond
+        
+        if is_windows:
+            # On Windows, we need to add an Ethernet header
+            eth_header = struct.pack('!6s6sH',
+                b'\x00\x00\x00\x00\x00\x00',  # dst mac
+                b'\x00\x00\x00\x00\x00\x00',  # src mac
+                0x0800  # IPv4 ethertype
+            )
+            pkt = eth_header + pkt
+            
         size = len(pkt)
-        self.file.write(struct.pack('@ I I I I', ts_sec, ts_usec, size, size))
+        if size > PACKET_SIZE:
+            logger.warning(f"Packet too large ({size} bytes), truncating to {PACKET_SIZE}")
+            size = PACKET_SIZE
+            pkt = pkt[:PACKET_SIZE]
+            
+        # Write packet header
+        self.file.write(struct.pack('=IIII',
+            ts_sec,    # timestamp seconds
+            ts_usec,   # timestamp microseconds
+            size,      # captured size
+            size       # actual size
+        ))
+        
+        # Write packet data
         self.file.write(pkt)
+        self.file.flush()  # Force write to disk
 
     def close(self):
         try:
@@ -251,14 +292,39 @@ def get_interfaces():
     return found
 
 
-def parse_args():
-    """Handle CLI arguments and a bit of validation."""
-    ifaces = get_interfaces()
+def select_interface(ifaces):
+    """
+    Present interface list and get user selection.
+    Returns tuple of (interface_name, ip_address)
+    """
     print("\nAvailable interfaces:")
     for i, (iface, ip) in enumerate(ifaces, 1):
         print(f"  {i}. {iface} ({ip})")
-    print()
+    
+    while True:
+        try:
+            choice = input("\nSelect interface number (or press Enter for default): ").strip()
+            if not choice:  # Empty input - use default
+                logger.info(f"Using default interface: {ifaces[0][0]}")
+                return ifaces[0]
+            
+            idx = int(choice) - 1
+            if 0 <= idx < len(ifaces):
+                selected = ifaces[idx]
+                logger.info(f"Selected interface: {selected[0]}")
+                return selected
+            else:
+                print(f"Please enter a number between 1 and {len(ifaces)}")
+        except ValueError:
+            print("Please enter a valid number")
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled. Using default interface.")
+            return ifaces[0]
 
+def parse_args():
+    """Handle CLI arguments and a bit of validation."""
+    ifaces = get_interfaces()
+    
     p = argparse.ArgumentParser(description="Network Sniffer")
     p.add_argument('--proto', help='Filter by protocol (tcp/udp/icmp)')
     p.add_argument('--port', type=int, help='Filter by port')
@@ -268,6 +334,12 @@ def parse_args():
     p.add_argument('-i', '--interface', help='Interface name or number')
 
     args = p.parse_args()
+    
+    # Handle interface selection
+    if not args.interface:
+        selected_iface = select_interface(ifaces)
+        args.interface = selected_iface[0]  # Use the interface name
+    
     if args.ip:
         try:
             socket.inet_aton(args.ip)
@@ -276,6 +348,7 @@ def parse_args():
 
     if args.verbose:
         logger.setLevel(logging.DEBUG)
+    
     return args
 
 
@@ -355,7 +428,7 @@ def main():
                             logger.info(packet_summary(proto, src_ip, dst_ip))
 
                     if writer:
-                        writer.write_packet(data)
+                        writer.write_packet(data, is_windows=(os.name == 'nt'))
 
                 except Exception as e:
                     # Sometimes packets are malformed — just skip
