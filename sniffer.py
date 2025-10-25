@@ -48,7 +48,11 @@ from contextlib import contextmanager
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.StreamHandler(),  # Console handler
+        logging.FileHandler('sniffer_debug.log')  # File handler
+    ]
 )
 logger = logging.getLogger("sniffer")
 
@@ -379,7 +383,12 @@ def main():
     running = [True]  # mutable reference hack
 
     if args.pcap:
-        writer = PCAPWriter(args.pcap)
+        try:
+            writer = PCAPWriter(args.pcap)
+            logger.info(f"Started capturing to PCAP file: {args.pcap}")
+        except Exception as e:
+            logger.error(f"Failed to create PCAP file: {e}")
+            sys.exit(1)
 
     signal.signal(signal.SIGINT, lambda s, f: running.__setitem__(0, False))
 
@@ -428,7 +437,12 @@ def main():
                             logger.info(packet_summary(proto, src_ip, dst_ip))
 
                     if writer:
-                        writer.write_packet(data, is_windows=(os.name == 'nt'))
+                        try:
+                            writer.write_packet(data, is_windows=(os.name == 'nt'))
+                            logger.debug(f"Wrote packet of size {len(data)} bytes to PCAP file")
+                        except Exception as e:
+                            logger.error(f"Failed to write packet to PCAP: {e}")
+                            # Don't raise, continue capturing
 
                 except Exception as e:
                     # Sometimes packets are malformed — just skip
@@ -446,5 +460,17 @@ def main():
 
 
 if __name__ == '__main__':
+    # Set up file logging
+    file_handler = logging.FileHandler('sniffer_debug.log')
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
     logger.debug("Starting packet sniffer main()")
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.exception("Fatal error occurred:")
+        # Keep window open to read error
+        input("Press Enter to exit...")
