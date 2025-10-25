@@ -66,7 +66,7 @@ sudo python3 sniffer.py
 - `--proto`: Filter by protocol (tcp/udp/icmp)
 - `--port`: Filter by port number
 - `--ip`: Filter by IP address
-- `--pcap`: Save output to PCAP file
+- `--pcap "file name.pcap"`: Save output to PCAP file
 
 ### Examples
 
