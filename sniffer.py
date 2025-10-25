@@ -52,7 +52,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sniffer")
 
-# --- Constants (I always forget these numbers) ---
+# --- Constants ---
 PACKET_SIZE = 65535
 ETH_HEADER_LEN = 14
 IP_HEADER_LEN = 20
@@ -168,7 +168,7 @@ def parse_ether_header(data: bytes):
 
 
 def parse_ip_header(data: bytes):
-    """Extract IP-level details. (Yeah, this one’s touchy about offsets.)"""
+    """Extract IP-level details. (Yeah, this ones touchy about offsets.)"""
     if len(data) < IP_HEADER_LEN:
         raise ValueError("Too short for IP header")
     try:
@@ -221,7 +221,6 @@ class PCAPWriter:
         logger.info(f"Writing packets to {filename}")
 
     def _write_header(self):
-        # Not proud of memorizing these constants...
         self.file.write(struct.pack('@ I H H i I I I',
             0xa1b2c3d4, 2, 4, 0, 0, PACKET_SIZE, 1))
 
@@ -314,6 +313,8 @@ def main():
     # little background watcher for typing "exit"
     t = threading.Thread(target=watch_for_exit, args=(running,), daemon=True)
     t.start()
+    # powershell doesnt even let you type while program open anyway cuz output flooding lmao
+    # just use ctrl+c and check log output
 
     try:
         with make_sniffer_socket(args) as sn:
@@ -369,8 +370,6 @@ def main():
         if writer:
             writer.close()
         logger.info("Sniffer stopped. Goodbye!")
-        # uncomment next line if you want to pause window in console mode
-        # input("Press Enter to exit...")
 
 
 if __name__ == '__main__':
