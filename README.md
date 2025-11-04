@@ -140,11 +140,6 @@ Contributions are welcome! Please feel free to submit pull requests.
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
-
-- Thanks to contributors and testers
-- Built with Python's socket library
-- Uses psutil for cross-platform compatibility
 
 ## Author
 
