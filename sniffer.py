@@ -45,15 +45,6 @@ import logging
 from contextlib import contextmanager
 
 # --- Logging setup ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        logging.StreamHandler(),  # Console handler
-        logging.FileHandler('sniffer_debug.log')  # File handler
-    ]
-)
 logger = logging.getLogger("sniffer")
 
 # --- Constants ---
@@ -155,9 +146,9 @@ def make_sniffer_socket(args):
             except Exception as e:
                 logger.warning(f"Socket cleanup failed: {e}")
                 
-def get_mac_addr(bytes_addr):
-    bytes_str = map('{:02x}'.format, bytes_addr)
-    return ':'.join(bytes_str).upper()
+def get_mac_str(byte_addr: bytes) -> str:
+    """Turns a MAC address (in bytes) into human-readable form."""
+    return ':'.join(f"{b:02x}" for b in byte_addr).upper()
 
 def validate_ip(ip_str):
     try:
@@ -165,16 +156,6 @@ def validate_ip(ip_str):
         return len(parts) == 4 and all(0 <= int(part) <= 255 for part in parts)
     except (AttributeError, TypeError, ValueError):
         return False
-
-def get_mac_str(byte_addr: bytes) -> str:
-    """Turns a MAC address (in bytes) into human-readable form."""
-    return ':'.join(f"{b:02x}" for b in byte_addr)
-
-def parse_ethernet_header(data):
-    dest_mac = data[:6]
-    src_mac = data[6:12]
-    proto = data[12:14]
-    return get_mac_addr(dest_mac), get_mac_addr(src_mac), int.from_bytes(proto, 'big'), data[14:]
 
 def parse_ether_header(data: bytes):
     """Parse the Ethernet part of the packet."""
@@ -230,21 +211,45 @@ def parse_udp_header(data: bytes):
         raise
 
 
+def parse_icmp_header(data: bytes):
+    """Parse ICMP header (type, code, checksum)."""
+    if len(data) < 4:
+        raise ValueError("ICMP header too small")
+    try:
+        icmp_type, code, checksum = struct.unpack('!BBH', data[:4])
+        return icmp_type, code, checksum, data[4:]
+    except struct.error as e:
+        logger.warning(f"ICMP parse failed: {e}")
+        raise
+
+
 class PCAPWriter:
-    """Super basic PCAP writer. Doesn’t handle truncation or endian weirdness."""
+    """PCAP writer with proper endianness handling and context manager support."""
 
     def __init__(self, filename):
         self.filename = filename
-        self.file = open(filename, 'wb')
-        self._write_header()
-        logger.info(f"Writing packets to {filename}")
+        self.file = None
+        try:
+            self.file = open(filename, 'wb')
+            self._write_header()
+            logger.info(f"Writing packets to {filename}")
+        except Exception as e:
+            if self.file:
+                self.file.close()
+            raise
 
     def _write_header(self):
-        self.file.write(struct.pack('@ I H H i I I I',
+        """Write PCAP file header with consistent byte order (little-endian)."""
+        # PCAP magic number: 0xa1b2c3d4 (little-endian)
+        # Version 2.4, timezone 0, sigfigs 0, snaplen, network type (1 = Ethernet)
+        self.file.write(struct.pack('< I H H i I I I',
             0xa1b2c3d4, 2, 4, 0, 0, PACKET_SIZE, 1))
 
     def write_packet(self, pkt, is_windows=False):
         """Write a packet to the PCAP file."""
+        if self.file is None or self.file.closed:
+            raise ValueError("PCAP file is closed")
+            
         now = datetime.now()
         ts_sec = int(now.timestamp())
         ts_usec = now.microsecond
@@ -264,8 +269,8 @@ class PCAPWriter:
             size = PACKET_SIZE
             pkt = pkt[:PACKET_SIZE]
             
-        # Write packet header
-        self.file.write(struct.pack('=IIII',
+        # Write packet header (little-endian for consistency)
+        self.file.write(struct.pack('<IIII',
             ts_sec,    # timestamp seconds
             ts_usec,   # timestamp microseconds
             size,      # captured size
@@ -277,11 +282,22 @@ class PCAPWriter:
         self.file.flush()  # Force write to disk
 
     def close(self):
-        try:
-            self.file.close()
-        except Exception:
-            pass
-        logger.debug("Closed PCAP file cleanly.")
+        """Close the PCAP file."""
+        if self.file and not self.file.closed:
+            try:
+                self.file.close()
+                logger.debug("Closed PCAP file cleanly.")
+            except Exception as e:
+                logger.warning(f"Error closing PCAP file: {e}")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures file is closed."""
+        self.close()
+        return False
 
 
 def get_interfaces():
@@ -379,16 +395,7 @@ def watch_for_exit(flag_list):
 def main():
     args = parse_args()
     filters = PacketFilter(args.proto, args.port, args.ip)
-    writer = None
     running = [True]  # mutable reference hack
-
-    if args.pcap:
-        try:
-            writer = PCAPWriter(args.pcap)
-            logger.info(f"Started capturing to PCAP file: {args.pcap}")
-        except Exception as e:
-            logger.error(f"Failed to create PCAP file: {e}")
-            sys.exit(1)
 
     signal.signal(signal.SIGINT, lambda s, f: running.__setitem__(0, False))
 
@@ -402,70 +409,93 @@ def main():
         with make_sniffer_socket(args) as sn:
             sn.settimeout(1.0)
             logger.info("Sniffer started... press Ctrl+C or type 'exit' to stop.")
-            while running[0]:
+            
+            # Use context manager for PCAP writer to ensure it's always closed
+            writer = None
+            if args.pcap:
                 try:
-                    data, addr = sn.recvfrom(PACKET_SIZE)
-                except socket.timeout:
-                    continue
+                    writer = PCAPWriter(args.pcap)
+                    logger.info(f"Started capturing to PCAP file: {args.pcap}")
                 except Exception as e:
-                    logger.error(f"Socket error: {e}")
-                    break
+                    logger.error(f"Failed to create PCAP file: {e}")
+                    sys.exit(1)
+            
+            try:
+                while running[0]:
+                    try:
+                        data, addr = sn.recvfrom(PACKET_SIZE)
+                    except socket.timeout:
+                        continue
+                    except Exception as e:
+                        logger.error(f"Socket error: {e}")
+                        break
 
-                try:
-                    if os.name != 'nt':
-                        d_mac, s_mac, eth_proto, payload = parse_ether_header(data)
-                        if eth_proto != 8:  # not IPv4
-                            continue
-                        version, ihl, ttl, proto, src_ip, dst_ip, ip_data = parse_ip_header(payload)
-                    else:
-                        version, ihl, ttl, proto, src_ip, dst_ip, ip_data = parse_ip_header(data)
+                    try:
+                        if os.name != 'nt':
+                            d_mac, s_mac, eth_proto, payload = parse_ether_header(data)
+                            if eth_proto != 8:  # not IPv4
+                                continue
+                            version, ihl, ttl, proto, src_ip, dst_ip, ip_data = parse_ip_header(payload)
+                        else:
+                            version, ihl, ttl, proto, src_ip, dst_ip, ip_data = parse_ip_header(data)
 
-                    # protocol logic
-                    if proto == 6:  # TCP
-                        s_port, d_port, *_ = parse_tcp_header(ip_data)
-                        if filters.matches(proto, s_port, d_port, src_ip, dst_ip):
-                            logger.info(packet_summary("TCP", src_ip, dst_ip, s_port, d_port))
+                        # protocol logic
+                        if proto == 6:  # TCP
+                            s_port, d_port, *_ = parse_tcp_header(ip_data)
+                            if filters.matches(proto, s_port, d_port, src_ip, dst_ip):
+                                logger.info(packet_summary("TCP", src_ip, dst_ip, s_port, d_port))
 
-                    elif proto == 17:  # UDP
-                        s_port, d_port, _, _ = parse_udp_header(ip_data)
-                        if filters.matches(proto, s_port, d_port, src_ip, dst_ip):
-                            logger.info(packet_summary("UDP", src_ip, dst_ip, s_port, d_port))
+                        elif proto == 17:  # UDP
+                            s_port, d_port, _, _ = parse_udp_header(ip_data)
+                            if filters.matches(proto, s_port, d_port, src_ip, dst_ip):
+                                logger.info(packet_summary("UDP", src_ip, dst_ip, s_port, d_port))
 
-                    else:
-                        # Just log something for unknown protocols
-                        if filters.matches(proto, 0, 0, src_ip, dst_ip):
-                            logger.info(packet_summary(proto, src_ip, dst_ip))
+                        elif proto == 1:  # ICMP
+                            icmp_type, code, _, _ = parse_icmp_header(ip_data)
+                            if filters.matches(proto, 0, 0, src_ip, dst_ip):
+                                logger.info(f"{src_ip} -> {dst_ip} (ICMP type={icmp_type}, code={code})")
 
-                    if writer:
-                        try:
-                            writer.write_packet(data, is_windows=(os.name == 'nt'))
-                            logger.debug(f"Wrote packet of size {len(data)} bytes to PCAP file")
-                        except Exception as e:
-                            logger.error(f"Failed to write packet to PCAP: {e}")
-                            # Don't raise, continue capturing
+                        else:
+                            # Just log something for unknown protocols
+                            if filters.matches(proto, 0, 0, src_ip, dst_ip):
+                                logger.info(packet_summary(proto, src_ip, dst_ip))
 
-                except Exception as e:
-                    # Sometimes packets are malformed — just skip
-                    logger.debug(f"Parse error: {e}")
-                    continue
+                        if writer:
+                            try:
+                                writer.write_packet(data, is_windows=(os.name == 'nt'))
+                                logger.debug(f"Wrote packet of size {len(data)} bytes to PCAP file")
+                            except Exception as e:
+                                logger.error(f"Failed to write packet to PCAP: {e}")
+                                # Don't raise, continue capturing
+
+                    except Exception as e:
+                        # Sometimes packets are malformed — just skip
+                        logger.debug(f"Parse error: {e}")
+                        continue
+            finally:
+                if writer:
+                    writer.close()
 
     except SecurityError as e:
         logger.error(f"Permission issue: {e}")
     except Exception as e:
         logger.exception("Unexpected failure:")
     finally:
-        if writer:
-            writer.close()
         logger.info("Sniffer stopped. Goodbye!")
 
 
 if __name__ == '__main__':
-    # Set up file logging
-    file_handler = logging.FileHandler('sniffer_debug.log')
-    file_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    # Set up logging (only once, at module level)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.StreamHandler(),  # Console handler
+            logging.FileHandler('sniffer_debug.log')  # File handler
+        ]
+    )
+    logger.setLevel(logging.INFO)
     
     logger.debug("Starting packet sniffer main()")
     try:

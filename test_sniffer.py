@@ -1,11 +1,14 @@
 import unittest
+import socket
+import struct
 from unittest.mock import patch, MagicMock
 from sniffer import (
-    parse_ethernet_header,
+    parse_ether_header,
     parse_ip_header,
     parse_tcp_header,
     parse_udp_header,
-    get_mac_addr
+    parse_icmp_header,
+    get_mac_str
 )
 
 def validate_ip(ip_str):
@@ -16,10 +19,10 @@ def validate_ip(ip_str):
         return False
 
 class TestSniffer(unittest.TestCase):
-    def test_get_mac_addr(self):
+    def test_get_mac_str(self):
         test_bytes = b'\x00\x0c\x29\xaf\xfa\x5e'
-        expected = '00:0c:29:af:fa:5e'
-        self.assertEqual(get_mac_addr(test_bytes), expected)
+        expected = '00:0C:29:AF:FA:5E'
+        self.assertEqual(get_mac_str(test_bytes), expected)
 
     def test_validate_ip(self):
         self.assertTrue(validate_ip('192.168.1.1'))
@@ -27,17 +30,16 @@ class TestSniffer(unittest.TestCase):
         self.assertFalse(validate_ip('256.256.256.256'))
         self.assertFalse(validate_ip('not.an.ip.address'))
 
-    def test_parse_ethernet_header(self):
+    def test_parse_ether_header(self):
         # Create a mock ethernet frame
         dest_mac = b'\x00\x0c\x29\xaf\xfa\x5e'
         src_mac = b'\x00\x0c\x29\xaf\xfa\x5f'
-        proto = b'\x08\x00'  # IPv4
         payload = b'test_payload'
-        frame = dest_mac + src_mac + proto + payload
+        frame = struct.pack('!6s6sH', dest_mac, src_mac, 0x0800) + payload
 
-        dest, src, eth_proto, data = parse_ethernet_header(frame)
-        self.assertEqual(dest, '00:0c:29:af:fa:5e')
-        self.assertEqual(src, '00:0c:29:af:fa:5f')
+        dest, src, eth_proto, data = parse_ether_header(frame)
+        self.assertEqual(dest, '00:0C:29:AF:FA:5E')
+        self.assertEqual(src, '00:0C:29:AF:FA:5F')
         self.assertEqual(eth_proto, 8)  # IPv4
         self.assertEqual(data, b'test_payload')
 
@@ -90,7 +92,20 @@ class TestSniffer(unittest.TestCase):
         src_port, dest_port, size, data = parse_udp_header(header)
         self.assertEqual(src_port, 53)
         self.assertEqual(dest_port, 9000)
-        self.assertEqual(size, 0)  # Size field in our mock data
+        self.assertEqual(size, 8)  # UDP header length
+        self.assertEqual(data, b'payload')
+
+    def test_parse_icmp_header(self):
+        # Create a mock ICMP header
+        header = (
+            b'\x08\x00'  # Type (8 = Echo Request), Code (0)
+            b'\x00\x00'  # Checksum
+            b'payload'
+        )
+
+        icmp_type, code, checksum, data = parse_icmp_header(header)
+        self.assertEqual(icmp_type, 8)
+        self.assertEqual(code, 0)
         self.assertEqual(data, b'payload')
 
 if __name__ == '__main__':
