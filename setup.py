@@ -30,11 +30,8 @@ setup(
         "Topic :: System :: Networking :: Monitoring",
         "Topic :: Security",
     ],
-    license="MIT",
+    # License and dependencies are defined in pyproject.toml
     python_requires=">=3.6",
-    install_requires=[
-        "psutil>=5.8.0",
-    ],
     entry_points={
         "console_scripts": [
             "packet-sniffer=sniffer:main",
