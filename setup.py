@@ -30,8 +30,12 @@ setup(
         "Topic :: System :: Networking :: Monitoring",
         "Topic :: Security",
     ],
-    # License and dependencies are defined in pyproject.toml
+    # License is defined in pyproject.toml, but keeping install_requires for backward compatibility
+    # with tools that read setup.py directly instead of pyproject.toml
     python_requires=">=3.6",
+    install_requires=[
+        "psutil>=5.9.0",
+    ],
     entry_points={
         "console_scripts": [
             "packet-sniffer=sniffer:main",

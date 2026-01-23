@@ -31,7 +31,7 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "psutil>=5.8.0",
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]
