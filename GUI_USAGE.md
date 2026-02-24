@@ -1,8 +1,8 @@
-# Network Packet Sniffer - GUI Usage Guide
+# NetTrace - GUI Usage Guide
 
 ## Overview
 
-The GUI application (`sniffer_gui.py`) provides a modern Windows-style interface for the network packet sniffer, making it easy to capture and analyze network traffic without using command-line arguments.
+The GUI application (`sniffer_gui.py`) provides a modern Windows-style interface for NetTrace, making it easy to capture and analyze network traffic without using command-line arguments.
 
 ## Features
 

@@ -1,9 +1,9 @@
 @echo off
-REM Batch script to set up virtual environment for Network Packet Sniffer
+REM Batch script to set up virtual environment for NetTrace
 REM Run this script in Command Prompt (as Administrator if needed)
 
 echo ========================================
-echo Network Packet Sniffer - Environment Setup
+echo NetTrace - Environment Setup
 echo ========================================
 echo.
 

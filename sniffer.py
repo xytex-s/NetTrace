@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Network Packet Sniffer (kinda advanced)
----------------------------------------
+NetTrace (kinda advanced)
+-------------------------
 
 This is my take on a multi-platform packet sniffer.  
 It captures live packets, filters them, and (optionally) saves them into a PCAP file.  

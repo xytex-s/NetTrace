@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Network Packet Sniffer - Windows GUI Application
-------------------------------------------------
+NetTrace - Windows GUI Application
+----------------------------------
 
-A modern Windows-style GUI for the network packet sniffer.
+A modern Windows-style GUI for NetTrace.
 Provides an intuitive interface for packet capture and analysis.
 
 Author: xytex-s
@@ -41,7 +41,7 @@ class PacketSnifferGUI:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Network Packet Sniffer")
+        self.root.title("NetTrace")
         self.root.geometry("1000x700")
         self.root.minsize(800, 600)
         

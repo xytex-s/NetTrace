@@ -1,5 +1,5 @@
 """
-Network Packet Sniffer package.
+NetTrace package.
 """
 
 __version__ = "1.0.0"

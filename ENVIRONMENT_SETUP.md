@@ -1,6 +1,6 @@
 # Environment Setup Guide
 
-This guide will help you set up a virtual environment with all required dependencies for the Network Packet Sniffer.
+This guide will help you set up a virtual environment with all required dependencies for NetTrace.
 
 ## Quick Setup
 
@@ -151,7 +151,7 @@ If you see "venv not found", run the setup script again:
 ## Project Structure
 
 ```
-Network-Packet-Sniffer/
+NetTrace/
 ├── venv/                 # Virtual environment (created by setup)
 ├── sniffer.py           # CLI version
 ├── sniffer_gui.py       # GUI version

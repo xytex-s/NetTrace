@@ -1,3 +1,3 @@
 """
-Test package for Network Packet Sniffer.
+Test package for NetTrace.
 """

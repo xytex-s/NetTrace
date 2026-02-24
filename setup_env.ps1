@@ -1,8 +1,8 @@
-# PowerShell script to set up virtual environment for Network Packet Sniffer
+# PowerShell script to set up virtual environment for NetTrace
 # Run this script in PowerShell (as Administrator if needed)
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Network Packet Sniffer - Environment Setup" -ForegroundColor Cyan
+Write-Host "NetTrace - Environment Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

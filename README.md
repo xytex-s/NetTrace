@@ -1,6 +1,6 @@
-# Network Packet Sniffer
+# NetTrace
 
-A robust network packet sniffer written in Python that captures and analyzes network traffic in real-time. This tool supports cross-platform operation, protocol filtering, and detailed packet analysis.
+NetTrace is a robust packet sniffer written in Python that captures and analyzes network traffic in real-time. This tool supports cross-platform operation, protocol filtering, and detailed packet analysis.
 
 ## Features
 
@@ -27,8 +27,8 @@ A robust network packet sniffer written in Python that captures and analyzes net
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/xytex-s/Network-Packet-Sniffer.git
-   cd Network-Packet-Sniffer
+   git clone https://github.com/xytex-s/NetTrace.git
+   cd NetTrace
    ```
 
 2. Create a virtual environment (optional but recommended):

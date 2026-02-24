@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "network-packet-sniffer"
+name = "nettrace"
 version = "1.0.0"
-description = "A robust network packet sniffer with cross-platform support"
+description = "NetTrace is a robust packet sniffer with cross-platform support"
 readme = "README.md"
 requires-python = ">=3.6"
 license = "MIT"
@@ -41,12 +41,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/xytex-s/Network-Packet-Sniffer"
-Repository = "https://github.com/xytex-s/Network-Packet-Sniffer"
-Issues = "https://github.com/xytex-s/Network-Packet-Sniffer/issues"
+Homepage = "https://github.com/xytex-s/NetTrace"
+Repository = "https://github.com/xytex-s/NetTrace"
+Issues = "https://github.com/xytex-s/NetTrace/issues"
 
 [project.scripts]
-packet-sniffer = "sniffer:main"
+nettrace = "sniffer:main"
 
 [tool.setuptools]
 packages = ["network_sniffer"]
