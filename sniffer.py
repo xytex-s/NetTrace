@@ -26,7 +26,7 @@ Usage examples:
     sudo python3 sniffer.py --proto tcp --port 80 --pcap out.pcap
     sudo python3 sniffer.py --ip 192.168.1.100
 
-Author: xytex-s
+Author: xytex-s (Ethan Mckay)
 License: MIT
 """
 
